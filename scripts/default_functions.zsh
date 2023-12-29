@@ -130,5 +130,5 @@ decompress()
 update_zebra_shark()
 {
     cd $installPath
-    git pull
+    git reset --hard origin/main
 }
