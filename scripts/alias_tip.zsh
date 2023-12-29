@@ -6,13 +6,27 @@ __search_and_print_alias_tip()
     # 1 = False
     FOUND_MATCH=1
 
-    FOUND_USER_ALIAS=${(k)aliases[(r)${1}]}
-    if [ $FOUND_USER_ALIAS ];
-    then
-        # 0 = True
-        FOUND_MATCH=0
-        print -P " ++ Alias Tip: %F{green}%B$FOUND_USER_ALIAS%b%f"
-    fi
+    local USER_COMMAND=$1          # User entered command
+    local USER_COMMAND_EXPANDED=$2 # Shell expands the user command and stores it in $2
+
+    local USER_ALIAS_LIST=(${(f)"$(alias)"}) # List of user aliases
+    for alias in $USER_ALIAS_LIST;
+    do
+        # Format of variable alias is: hi='echo Hello'
+        local SPLIT_USER_ALIAS_ON_EQUAL=("${(@s/=/)"${alias}"}") # Split the alias at '='
+        local USER_ALIAS=${SPLIT_USER_ALIAS_ON_EQUAL[1]} # USER_ALIAS = hi
+        local USER_ALIAS_EXPANDED=$(echo ${SPLIT_USER_ALIAS_ON_EQUAL[2]} | sed "s/'//g") # Strip out the single quotes from 'echo Hello'
+                                                                                         # USER_ALIAS_EXPANDED = echo Hello
+        
+        # if echo Hello = echo Hello
+        if [[ $USER_COMMAND == $USER_ALIAS_EXPANDED ]];
+        then
+            # 0 = True
+            FOUND_MATCH=0
+            echo " ++ Alias Tip:$BGreen $USER_ALIAS $Color_Off" # Alert the user to use alias "hi"
+            break
+        fi
+    done
 
     return $FOUND_MATCH
 }
@@ -33,35 +47,54 @@ __zsh_alias_finder_runner()
     # Perhaps a future feature.
     ######
 
-    USER_COMMAND_IN=$1
+    local USER_COMMAND=$1          # User entered command
+    local USER_COMMAND_EXPANDED=$2 # Shell expands the user command and stores it in $2
 
-    __search_and_print_alias_tip $USER_COMMAND_IN
-    FOUND_MATCH_RETURN=$?
-
-    if [[ $FOUND_MATCH_RETURN != 0 ]];
+    if [[ $USER_COMMAND == $USER_COMMAND_EXPANDED ]];
     then
-        # This is where special conditions start.
-        # Condition 0: ~
-        if [[ $1 == *~* ]];
-        then
-            # Convert the ~ to $HOME and try again.
-            USER_COMMAND_IN=${USER_COMMAND_IN//'~'/$HOME}
-        fi
+        # Did not type in an alias, need to search aliases
 
-        # Condition 1: The user command was 'cd' and ends with a /
-        if [[ $1 == cd* ]] && [[ $1 == */ ]];
+        # If the user command($1) and the user command expanded($2) match,
+        # this means the user DID NOT type in an alias
+
+        # Example 1: Assuming alias hi='echo Hello'
+        # User input command: hi
+        # User input command expanded: echo Hello
+        # hi != echo Hello, which means hi is an alias and no searching is neccessary
+        # --
+        # Example 2: Assuming alias hi='echo Hello'
+        # User input command: hey
+        # User input command expanded: hey
+        # hey = hey, so hey IS NOT an alias, so you'll search aliases to find a match for hey
+
+        __search_and_print_alias_tip $USER_COMMAND $USER_COMMAND_EXPANDED
+        FOUND_MATCH_RETURN=$?
+
+        if [[ $FOUND_MATCH_RETURN != 0 ]];
         then
-            # If the user command ends with a /, then strip the / and try to match.
-            USER_COMMAND_IN=${USER_COMMAND_IN[1,-2]}
-        # Condition 2: The user command was 'cd' but doesn't end with a /
-        elif [[ $1 == cd* ]];
-        then
-            # If the user command does not end with a /, then add a / and try to match.
-            USER_COMMAND_IN=$USER_COMMAND_IN/
+            # This is where special conditions start.
+            # Condition 0: ~
+            if [[ $1 == *~* ]];
+            then
+                # Convert the ~ to $HOME and try again.
+                USER_COMMAND=${USER_COMMAND//'~'/$HOME}
+            fi
+
+            # Condition 1: The user command was 'cd' and ends with a /
+            if [[ $1 == cd* ]] && [[ $1 == */ ]];
+            then
+                # If the user command ends with a /, then strip the / and try to match.
+                USER_COMMAND=${USER_COMMAND[1,-2]}
+            # Condition 2: The user command was 'cd' but doesn't end with a /
+            elif [[ $1 == cd* ]];
+            then
+                # If the user command does not end with a /, then add a / and try to match.
+                USER_COMMAND=$USER_COMMAND/
+            fi
+            
+            # Attempt a search again after a / was removed/added.
+            __search_and_print_alias_tip $USER_COMMAND $USER_COMMAND_EXPANDED
         fi
-        
-        # Attempt a search again after a / was removed/added.
-        __search_and_print_alias_tip $USER_COMMAND_IN
     fi
 }
 
